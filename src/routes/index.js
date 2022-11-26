@@ -2,7 +2,7 @@ const { fetch } = require("cross-fetch");
 require("dotenv").config();
 const { API_KEY } = process.env;
 const { Router } = require("express");
-const { Diet, Recipe, Op } = require("../db.js");
+const { Diet, Recipe, Recipeapi, Op } = require("../db.js");
 
 // Importar todos los routers;
 // Ejemplo: const authRouter = require('./auth.js');
@@ -15,7 +15,7 @@ const router = Router();
 router.get("/recipes", async (req, res, next) => {
   const { name } = req.query;
   let allRecipes = [];
-  let recetaAPI = [];
+
   const join = [
     {
       model: Diet,
@@ -27,20 +27,42 @@ router.get("/recipes", async (req, res, next) => {
   ];
 
   try {
-    const response = await fetch(
-      `https://api.spoonacular.com/recipes/complexSearch?apiKey=${API_KEY}&addRecipeInformation=true&number=70`
-    );
-    const data = await response.json();
-    if (data.results) {
-      recetaAPI = data.results.map((e) => {
-        return {
-          id: e.id,
-          title: e.title,
-          healthScore: e.healthScore,
-          image: e.image,
-          diets: e.diets,
-        };
-      });
+    // const response = await fetch(
+    //   `https://api.spoonacular.com/recipes/complexSearch?apiKey=${API_KEY}&addRecipeInformation=true&number=70`
+    // );
+    // const data = await response.json();
+    // if (data.results) {
+    //   recetaAPI = data.results.map((e) => {
+    //     return {
+    //       id: e.id,
+    //       title: e.title,
+    //       healthScore: e.healthScore,
+    //       image: e.image,
+    //       diets: e.diets,
+    //     };
+    //   });
+    // }
+    if ((await Recipeapi.count()) === 0) {
+      const response = await fetch(
+        `https://api.spoonacular.com/recipes/complexSearch?apiKey=${API_KEY}&addRecipeInformation=true&number=70`
+      );
+      const data = await response.json();
+      if (data.results) {
+        let recetaAPI = [];
+        recetaAPI = data.results.map((e) => {
+          return {
+            title: e.title,
+            summary: e.summary,
+            healthScore: e.healthScore,
+            steps: e.analyzedInstructions[0]?.steps
+              .map((e) => e.step)
+              .join(" "),
+            image: e.image,
+            diets: e.diets,
+          };
+        });
+        await Recipeapi.bulkCreate(recetaAPI);
+      }
     }
 
     if (name) {
@@ -67,9 +89,17 @@ router.get("/recipes", async (req, res, next) => {
           });
           allRecipes = [...rBD];
         }
-        const recipesAPI = recetaAPI.filter((e) => {
-          return e.title.toUpperCase().includes(name.toUpperCase()) === true;
+        const recipesAPI = await Recipeapi.findAll({
+          where: {
+            title: {
+              [Op.iLike]: name + "%",
+            },
+          },
+          attributes: ["id", "title", "healthScore", "image", "diets"],
         });
+        // const recipesAPI = recetaAPI.filter((e) => {
+        //   return e.title.toUpperCase().includes(name.toUpperCase()) === true;
+        // });
 
         if (recipesAPI) {
           allRecipes = [...allRecipes, ...recipesAPI];
@@ -99,8 +129,11 @@ router.get("/recipes", async (req, res, next) => {
             diets: e.diets.map((d) => d.name),
           };
         });
+        let recipesAPI = await Recipeapi.findAll({
+          attributes: ["id", "title", "healthScore", "image", "diets"],
+        });
 
-        res.status(200).json([...recipesBD, ...recetaAPI]);
+        res.status(200).json([...recipesBD, ...recipesAPI]);
       } catch (err) {
         next(err);
       }
@@ -113,26 +146,29 @@ router.get("/recipes/:id", async (req, res, next) => {
   let { id } = req.params;
 
   try {
-    if (id.includes("-") === false) {
-      let ID = parseInt(id);
-      const response = await fetch(
-        `https://api.spoonacular.com/recipes/${ID}/information?apiKey=${API_KEY}`
-      );
-      const data = await response.json();
-      if (data) {
-        const recipeAPI = {
-          id: data.id,
-          title: data.title,
-          summary: data.summary,
-          healthScore: data.healthScore,
-          steps: data.instructions,
-          image: data.image,
-          diets: data.diets,
-        };
-        return res.status(200).json(recipeAPI);
-      }
+    // if (id.includes("-") === false) {
+    //   let ID = parseInt(id);
+    //   const response = await fetch(
+    //     `https://api.spoonacular.com/recipes/${ID}/information?apiKey=${API_KEY}`
+    //   );
+    //   const data = await response.json();
+    //   if (data) {
+    //     const recipeAPI = {
+    //       id: data.id,
+    //       title: data.title,
+    //       summary: data.summary,
+    //       healthScore: data.healthScore,
+    //       steps: data.instructions,
+    //       image: data.image,
+    //       diets: data.diets,
+    //     };
+    //     return res.status(200).json(recipeAPI);
+    //   }
+    // }
+    const recipeAPI = await Recipeapi.findByPk(id);
+    if (recipeAPI) {
+      return res.status(200).json(recipeAPI);
     }
-
     const recipeBD = await Recipe.findByPk(id, {
       include: [
         {
