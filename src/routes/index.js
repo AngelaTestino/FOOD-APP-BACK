@@ -3,6 +3,7 @@ require("dotenv").config();
 const { API_KEY } = process.env;
 const { Router } = require("express");
 const { Diet, Recipe, Recipeapi, Op } = require("../db.js");
+const diets = require("../../data/diets")
 
 // Importar todos los routers;
 // Ejemplo: const authRouter = require('./auth.js');
@@ -46,6 +47,7 @@ router.get("/recipes", async (req, res, next) => {
             diets: e.diets,
           };
         });
+        await Diet.bulkCreate(diets)
         await Recipeapi.bulkCreate(recetaAPI);
       }
     }
